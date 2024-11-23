@@ -70,6 +70,10 @@ pub enum Error {
         error: Cow<'static, str>,
         backtrace: Backtrace,
     },
+    #[snafu(display("Only one debug flag (allow_debug, force_debug, or force_debug_prod) can be set"))]
+    InvalidNpdmDebugFlags {
+        backtrace: Backtrace,
+    },
     #[snafu(display("Failed to serialize NPDM."))]
     BincodeError {
         error: Box<bincode::ErrorKind>,

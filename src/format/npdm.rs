@@ -125,10 +125,10 @@ pub enum KernelCapability {
     KernelVersion(KernelVersion),
     HandleTableSize(u16),
     #[serde(alias = "debug_flags")]
-    MiscFlags {
-        #[serde(alias = "allow_debug")]
-        enable_debug: bool,
-        force_debug: bool,
+    DebugFlags {
+        allow_debug: bool,
+        force_debug_prod: bool,
+        force_debug: bool
     },
 }
 
@@ -207,12 +207,21 @@ impl KernelCapability {
             KernelCapability::HandleTableSize(handle_table_size) => {
                 Ok(vec![*0b111_1111_1111_1111u32.set_bits(16..26, u32::from(*handle_table_size))])
             }
-            KernelCapability::MiscFlags {
-                enable_debug,
+            KernelCapability::DebugFlags {
+                allow_debug,
                 force_debug,
-            } => Ok(vec![*0b1111_1111_1111_1111u32
-                .set_bit(17, *enable_debug)
-                .set_bit(18, *force_debug)]),
+                force_debug_prod
+            } => {
+                if ((*allow_debug as u32) + (*force_debug as u32) + (*force_debug_prod as u32)) > 1 {
+                    Err(Error::InvalidNpdmDebugFlags { backtrace: Backtrace::generate() })
+                }
+                else {
+                    Ok(vec![*0b1111_1111_1111_1111u32
+                        .set_bit(17, *allow_debug)
+                        .set_bit(18, *force_debug_prod)
+                        .set_bit(19, *force_debug)])
+                }
+            }
         }
     }
 }
@@ -260,7 +269,8 @@ pub struct KernelCapabilityValues {
     enable_interrupts: Option<Vec<[u16; 2]>>,
     program_type: Option<ProgramType>,
     kernel_version: Option<KernelVersion>,
-    enable_debug: Option<bool>,
+    allow_debug: Option<bool>,
+    force_debug_prod: Option<bool>,
     force_debug: Option<bool>
 }
 
@@ -316,12 +326,13 @@ impl KernelCapabilityValues {
             kern_caps.push(kern_version_kcap);
         }
 
-        if self.enable_debug.is_some() || self.force_debug.is_some() {
-            let misc_flags_kcap = KernelCapability::MiscFlags {
-                enable_debug: self.enable_debug.unwrap_or(false),
+        if self.allow_debug.is_some() || self.force_debug_prod.is_some() || self.force_debug.is_some() {
+            let debug_flags_kcap = KernelCapability::DebugFlags {
+                allow_debug: self.allow_debug.unwrap_or(false),
+                force_debug_prod: self.force_debug_prod.unwrap_or(false),
                 force_debug: self.force_debug.unwrap_or(false)
             };
-            kern_caps.push(misc_flags_kcap);
+            kern_caps.push(debug_flags_kcap);
         }
 
         kern_caps
